@@ -89,7 +89,19 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
             const p = payload as { from: Role; name: string };
             if (p.from !== role) {
               setPeerName(p.name);
+              // Echo presence so the peer that joined later also discovers us
+              sendSignal("presence-ack", {});
               // Agent initiates the offer when customer joins
+              if (role === "agent" && pc.signalingState === "stable" && !startedRef.current) {
+                startedRef.current = true;
+                makeOffer();
+              }
+            }
+          })
+          .on("broadcast", { event: "presence-ack" }, ({ payload }) => {
+            const p = payload as { from: Role; name: string };
+            if (p.from !== role) {
+              setPeerName(p.name);
               if (role === "agent" && pc.signalingState === "stable" && !startedRef.current) {
                 startedRef.current = true;
                 makeOffer();

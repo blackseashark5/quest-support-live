@@ -14,16 +14,263 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      messages: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          sender_id: string | null
+          sender_name: string
+          session_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          id?: string
+          sender_id?: string | null
+          sender_name: string
+          session_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          sender_id?: string | null
+          sender_name?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          created_at: string
+          email: string | null
+          id: string
+          name: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          id: string
+          name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      session_events: {
+        Row: {
+          created_at: string
+          event_type: string
+          id: string
+          payload: Json
+          session_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_type: string
+          id?: string
+          payload?: Json
+          session_id: string
+        }
+        Update: {
+          created_at?: string
+          event_type?: string
+          id?: string
+          payload?: Json
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_events_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      session_invites: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          session_id: string
+          token: string
+          used: boolean
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          session_id: string
+          token?: string
+          used?: boolean
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          session_id?: string
+          token?: string
+          used?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_invites_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      session_participants: {
+        Row: {
+          connection_status: string
+          display_name: string
+          id: string
+          joined_at: string
+          left_at: string | null
+          role: string
+          session_id: string
+          user_id: string | null
+        }
+        Insert: {
+          connection_status?: string
+          display_name: string
+          id?: string
+          joined_at?: string
+          left_at?: string | null
+          role?: string
+          session_id: string
+          user_id?: string | null
+        }
+        Update: {
+          connection_status?: string
+          display_name?: string
+          id?: string
+          joined_at?: string
+          left_at?: string | null
+          role?: string
+          session_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_participants_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sessions: {
+        Row: {
+          agent_id: string
+          created_at: string
+          customer_name: string | null
+          duration_seconds: number | null
+          ended_at: string | null
+          id: string
+          notes: string | null
+          session_code: string
+          started_at: string | null
+          status: Database["public"]["Enums"]["session_status"]
+          title: string
+        }
+        Insert: {
+          agent_id: string
+          created_at?: string
+          customer_name?: string | null
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          notes?: string | null
+          session_code?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["session_status"]
+          title: string
+        }
+        Update: {
+          agent_id?: string
+          created_at?: string
+          customer_name?: string | null
+          duration_seconds?: number | null
+          ended_at?: string | null
+          id?: string
+          notes?: string | null
+          session_code?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["session_status"]
+          title?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      redeem_invite: {
+        Args: { _display_name: string; _token: string }
+        Returns: {
+          customer_name: string
+          participant_id: string
+          session_code: string
+          session_id: string
+          status: Database["public"]["Enums"]["session_status"]
+          title: string
+        }[]
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "agent" | "customer" | "admin"
+      session_status: "created" | "waiting" | "active" | "ended"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +397,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["agent", "customer", "admin"],
+      session_status: ["created", "waiting", "active", "ended"],
+    },
   },
 } as const

@@ -83,10 +83,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "AtomQuest Support Connect — Live video support" },
       { name: "description", content: "Enterprise live video support: invite-only sessions, in-call chat, screen sharing — self-hosted media, no third-party vendor." },
       { name: "author", content: "AtomQuest" },
-      { property: "og:title", content: "AtomQuest Support Connect" },
-      { property: "og:description", content: "Live video support for product teams. Self-hosted media. Invite-only." },
+      { property: "og:title", content: "AtomQuest Support Connect — Live video support" },
+      { property: "og:description", content: "Enterprise live video support: invite-only sessions, in-call chat, screen sharing — self-hosted media, no third-party vendor." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
+      { name: "twitter:title", content: "AtomQuest Support Connect — Live video support" },
+      { name: "twitter:description", content: "Enterprise live video support: invite-only sessions, in-call chat, screen sharing — self-hosted media, no third-party vendor." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/1d7ee45d-070b-4578-9d27-b77a08b017e8/id-preview-904e3241--05e4ba7c-b77f-4f4e-9090-267aa0b237cb.lovable.app-1781338958202.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/1d7ee45d-070b-4578-9d27-b77a08b017e8/id-preview-904e3241--05e4ba7c-b77f-4f4e-9090-267aa0b237cb.lovable.app-1781338958202.png" },
     ],
     links: [
       {

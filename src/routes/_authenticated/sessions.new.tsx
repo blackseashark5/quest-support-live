@@ -20,8 +20,8 @@ export const Route = createFileRoute("/_authenticated/sessions/new")({
 
 const schema = z.object({
   title: z.string().trim().min(1, "Required").max(120),
-  customer_name: z.string().trim().max(120).optional().default(""),
-  notes: z.string().trim().max(2000).optional().default(""),
+  customer_name: z.string().trim().max(120),
+  notes: z.string().trim().max(2000),
 });
 type Vals = z.infer<typeof schema>;
 

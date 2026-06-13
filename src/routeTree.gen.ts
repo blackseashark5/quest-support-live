@@ -13,6 +13,7 @@ import { Route as JoinRouteImport } from './routes/join'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as RoomSessionIdRouteImport } from './routes/room.$sessionId'
 import { Route as JoinTokenRouteImport } from './routes/join.$token'
 import { Route as AuthenticatedHistoryRouteImport } from './routes/_authenticated/history'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
@@ -36,6 +37,11 @@ const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RoomSessionIdRoute = RoomSessionIdRouteImport.update({
+  id: '/room/$sessionId',
+  path: '/room/$sessionId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const JoinTokenRoute = JoinTokenRouteImport.update({
@@ -72,6 +78,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/join/$token': typeof JoinTokenRoute
+  '/room/$sessionId': typeof RoomSessionIdRoute
   '/sessions/$id': typeof AuthenticatedSessionsIdRoute
   '/sessions/new': typeof AuthenticatedSessionsNewRoute
 }
@@ -82,6 +89,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/history': typeof AuthenticatedHistoryRoute
   '/join/$token': typeof JoinTokenRoute
+  '/room/$sessionId': typeof RoomSessionIdRoute
   '/sessions/$id': typeof AuthenticatedSessionsIdRoute
   '/sessions/new': typeof AuthenticatedSessionsNewRoute
 }
@@ -94,6 +102,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/history': typeof AuthenticatedHistoryRoute
   '/join/$token': typeof JoinTokenRoute
+  '/room/$sessionId': typeof RoomSessionIdRoute
   '/_authenticated/sessions/$id': typeof AuthenticatedSessionsIdRoute
   '/_authenticated/sessions/new': typeof AuthenticatedSessionsNewRoute
 }
@@ -106,6 +115,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/history'
     | '/join/$token'
+    | '/room/$sessionId'
     | '/sessions/$id'
     | '/sessions/new'
   fileRoutesByTo: FileRoutesByTo
@@ -116,6 +126,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/history'
     | '/join/$token'
+    | '/room/$sessionId'
     | '/sessions/$id'
     | '/sessions/new'
   id:
@@ -127,6 +138,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/history'
     | '/join/$token'
+    | '/room/$sessionId'
     | '/_authenticated/sessions/$id'
     | '/_authenticated/sessions/new'
   fileRoutesById: FileRoutesById
@@ -136,6 +148,7 @@ export interface RootRouteChildren {
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
   JoinRoute: typeof JoinRouteWithChildren
+  RoomSessionIdRoute: typeof RoomSessionIdRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -166,6 +179,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/room/$sessionId': {
+      id: '/room/$sessionId'
+      path: '/room/$sessionId'
+      fullPath: '/room/$sessionId'
+      preLoaderRoute: typeof RoomSessionIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/join/$token': {
@@ -238,6 +258,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
   JoinRoute: JoinRouteWithChildren,
+  RoomSessionIdRoute: RoomSessionIdRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

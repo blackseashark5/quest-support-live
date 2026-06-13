@@ -15,6 +15,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as JoinTokenRouteImport } from './routes/join.$token'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedSessionsNewRouteImport } from './routes/_authenticated/sessions.new'
 
 const JoinRoute = JoinRouteImport.update({
   id: '/join',
@@ -45,6 +46,12 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedSessionsNewRoute =
+  AuthenticatedSessionsNewRouteImport.update({
+    id: '/sessions/new',
+    path: '/sessions/new',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -52,6 +59,7 @@ export interface FileRoutesByFullPath {
   '/join': typeof JoinRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/join/$token': typeof JoinTokenRoute
+  '/sessions/new': typeof AuthenticatedSessionsNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -59,6 +67,7 @@ export interface FileRoutesByTo {
   '/join': typeof JoinRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/join/$token': typeof JoinTokenRoute
+  '/sessions/new': typeof AuthenticatedSessionsNewRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -68,12 +77,19 @@ export interface FileRoutesById {
   '/join': typeof JoinRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/join/$token': typeof JoinTokenRoute
+  '/_authenticated/sessions/new': typeof AuthenticatedSessionsNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/join' | '/dashboard' | '/join/$token'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/join'
+    | '/dashboard'
+    | '/join/$token'
+    | '/sessions/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/join' | '/dashboard' | '/join/$token'
+  to: '/' | '/auth' | '/join' | '/dashboard' | '/join/$token' | '/sessions/new'
   id:
     | '__root__'
     | '/'
@@ -82,6 +98,7 @@ export interface FileRouteTypes {
     | '/join'
     | '/_authenticated/dashboard'
     | '/join/$token'
+    | '/_authenticated/sessions/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -135,15 +152,24 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/sessions/new': {
+      id: '/_authenticated/sessions/new'
+      path: '/sessions/new'
+      fullPath: '/sessions/new'
+      preLoaderRoute: typeof AuthenticatedSessionsNewRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedSessionsNewRoute: typeof AuthenticatedSessionsNewRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedSessionsNewRoute: AuthenticatedSessionsNewRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

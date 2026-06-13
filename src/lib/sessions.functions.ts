@@ -4,8 +4,8 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 const CreateSchema = z.object({
   title: z.string().trim().min(1).max(120),
-  customer_name: z.string().trim().max(120).optional().default(""),
-  notes: z.string().trim().max(2000).optional().default(""),
+  customer_name: z.string().trim().max(120).optional(),
+  notes: z.string().trim().max(2000).optional(),
 });
 
 export const createSession = createServerFn({ method: "POST" })

@@ -6,7 +6,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { markSessionActive, endSession, logSessionEvent } from "@/lib/sessions.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Mic, MicOff, Video as VideoIcon, VideoOff, MonitorUp, PhoneOff, MessageSquare, Send, Loader2 } from "lucide-react";
+import { Mic, MicOff, Video as VideoIcon, VideoOff, MonitorUp, PhoneOff, MessageSquare, Send, Loader2, AlertTriangle, Camera } from "lucide-react";
 
 export const Route = createFileRoute("/room/$sessionId")({
   head: () => ({ meta: [{ title: "Live support session" }] }),
@@ -117,6 +117,37 @@ function RoomInner({ sessionId, role, displayName }: { sessionId: string; role: 
   }[call.status];
 
   const statusDot = call.status === "connected" ? "bg-emerald-500" : call.status === "failed" ? "bg-destructive" : "bg-amber-500";
+
+  if (!call.started) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-background p-6">
+        <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h1 className="text-lg font-semibold">Ready to join</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            We need access to your camera and microphone to start the call.
+          </p>
+          {call.error && (
+            <div className="mt-4 flex gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>{call.error}</span>
+            </div>
+          )}
+          <div className="mt-5 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => router.navigate({ to: role === "agent" ? "/dashboard" : "/" })}>
+              Cancel
+            </Button>
+            <Button onClick={() => { void call.start(); }} disabled={call.status === "connecting"}>
+              {call.status === "connecting" ? (
+                <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Requesting…</>
+              ) : (
+                <><Camera className="mr-2 h-4 w-4" /> Allow camera & join</>
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">

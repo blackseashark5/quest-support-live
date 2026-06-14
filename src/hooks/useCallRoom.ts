@@ -30,11 +30,14 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
   const [camOff, setCamOff] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [started, setStarted] = useState(false);
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const startedRef = useRef(false);
+  const cleanupRef = useRef<(() => void) | null>(null);
 
   const sendSignal = useCallback((type: string, payload: unknown) => {
     channelRef.current?.send({ type: "broadcast", event: type, payload: { from: role, name: displayName, ...(payload as object) } });
@@ -70,21 +73,41 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
     sendSignal("offer", { sdp: offer });
   }, [sendSignal]);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function start() {
-      setStatus("connecting");
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
-        cameraTrackRef.current = stream.getVideoTracks()[0];
-        setLocalStream(stream);
-        const pc = setupPeer(stream);
+  const start = useCallback(async () => {
+    if (startedRef.current && pcRef.current) return;
+    setError(null);
+    setStatus("connecting");
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("Your browser does not support camera access. Use a recent Chrome, Edge, Firefox or Safari over HTTPS.");
+      setStatus("failed");
+      return;
+    }
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    } catch (e) {
+      const err = e as DOMException;
+      const msg =
+        err.name === "NotAllowedError" || err.name === "SecurityError"
+          ? "Camera and microphone permission was blocked. Allow access in your browser's site settings and try again."
+          : err.name === "NotFoundError" || err.name === "OverconstrainedError"
+          ? "No camera or microphone was found on this device."
+          : err.name === "NotReadableError"
+          ? "Your camera or microphone is in use by another application. Close it and try again."
+          : `Could not access camera or microphone: ${err.message || err.name}`;
+      setError(msg);
+      setStatus("failed");
+      return;
+    }
+    setStarted(true);
+    cameraTrackRef.current = stream.getVideoTracks()[0];
+    setLocalStream(stream);
+    const pc = setupPeer(stream);
 
-        const channel = supabase.channel(`room:${sessionId}`, { config: { broadcast: { self: false } } });
-        channelRef.current = channel;
+    const channel = supabase.channel(`room:${sessionId}`, { config: { broadcast: { self: false } } });
+    channelRef.current = channel;
 
-        channel
+    channel
           .on("broadcast", { event: "presence" }, ({ payload }) => {
             const p = payload as { from: Role; name: string };
             if (p.from !== role) {
@@ -142,24 +165,24 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
               sendSignal("presence", {});
             }
           });
-      } catch (e) {
-        console.error(e);
-        setStatus("failed");
-      }
-    }
-    start();
-    return () => {
-      cancelled = true;
+
+    cleanupRef.current = () => {
       try { channelRef.current?.send({ type: "broadcast", event: "bye", payload: { from: role } }); } catch {}
-      channelRef.current && supabase.removeChannel(channelRef.current);
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
       pcRef.current?.getSenders().forEach((s) => s.track?.stop());
+      stream.getTracks().forEach((t) => t.stop());
       pcRef.current?.close();
       pcRef.current = null;
-      setLocalStream(null);
-      setRemoteStream(null);
+      channelRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId, role, displayName]);
+  }, [sessionId, role, sendSignal, setupPeer, makeOffer]);
+
+  useEffect(() => {
+    return () => {
+      cleanupRef.current?.();
+      cleanupRef.current = null;
+    };
+  }, []);
 
   const toggleMute = useCallback(() => {
     if (!localStream) return;
@@ -213,7 +236,7 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
   }, [localStream, role]);
 
   return {
-    localStream, remoteStream, status, peerName,
+    localStream, remoteStream, status, peerName, error, started, start,
     muted, camOff, sharing, messages,
     toggleMute, toggleCam, toggleShare, sendChat, hangup,
   };

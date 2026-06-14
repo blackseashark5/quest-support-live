@@ -215,6 +215,78 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
     };
   }, []);
 
+  // Poll WebRTC stats while connected for the diagnostics panel.
+  useEffect(() => {
+    if (!started) return;
+    const tick = async () => {
+      const pc = pcRef.current;
+      if (!pc) return;
+      try {
+        const report = await pc.getStats();
+        let localType: string | undefined;
+        let remoteType: string | undefined;
+        let protocol: string | undefined;
+        let rtt: number | undefined;
+        let audioIn = 0, videoIn = 0, audioOut = 0, videoOut = 0;
+        const candidates = new Map<string, RTCStats & Record<string, unknown>>();
+        report.forEach((r: RTCStats & Record<string, unknown>) => {
+          if (r.type === "local-candidate" || r.type === "remote-candidate") candidates.set(r.id, r);
+        });
+        report.forEach((r: RTCStats & Record<string, unknown>) => {
+          if (r.type === "candidate-pair" && (r as { selected?: boolean; nominated?: boolean }).nominated) {
+            const local = candidates.get(r.localCandidateId as string);
+            const remote = candidates.get(r.remoteCandidateId as string);
+            localType = local?.candidateType as string | undefined;
+            remoteType = remote?.candidateType as string | undefined;
+            protocol = local?.protocol as string | undefined;
+            rtt = r.currentRoundTripTime as number | undefined;
+          }
+          if (r.type === "inbound-rtp") {
+            const kind = r.kind as string;
+            const bytes = (r.bytesReceived as number) || 0;
+            if (kind === "audio") audioIn += bytes;
+            if (kind === "video") videoIn += bytes;
+          }
+          if (r.type === "outbound-rtp") {
+            const kind = r.kind as string;
+            const bytes = (r.bytesSent as number) || 0;
+            if (kind === "audio") audioOut += bytes;
+            if (kind === "video") videoOut += bytes;
+          }
+        });
+        const now = Date.now();
+        const prev = prevBytesRef.current;
+        let aIn: number | undefined, vIn: number | undefined, aOut: number | undefined, vOut: number | undefined;
+        if (prev) {
+          const dt = (now - prev.ts) / 1000;
+          if (dt > 0) {
+            aIn = ((audioIn - prev.ai) * 8) / 1000 / dt;
+            vIn = ((videoIn - prev.vi) * 8) / 1000 / dt;
+            aOut = ((audioOut - prev.ao) * 8) / 1000 / dt;
+            vOut = ((videoOut - prev.vo) * 8) / 1000 / dt;
+          }
+        }
+        prevBytesRef.current = { ts: now, ai: audioIn, vi: videoIn, ao: audioOut, vo: videoOut };
+        setStats((s) => ({
+          ...s,
+          localCandidateType: localType,
+          remoteCandidateType: remoteType,
+          protocol,
+          rtt,
+          audioInKbps: aIn,
+          videoInKbps: vIn,
+          audioOutKbps: aOut,
+          videoOutKbps: vOut,
+        }));
+      } catch {
+        // ignore stats errors
+      }
+    };
+    const id = window.setInterval(tick, 2000);
+    tick();
+    return () => window.clearInterval(id);
+  }, [started]);
+
   const toggleMute = useCallback(() => {
     if (!localStream) return;
     const enabled = !muted;
@@ -267,7 +339,7 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
   }, [localStream, role]);
 
   return {
-    localStream, remoteStream, status, peerName, error, started, start,
+    localStream, remoteStream, status, peerName, error, started, start, stats,
     muted, camOff, sharing, messages,
     toggleMute, toggleCam, toggleShare, sendChat, hangup,
   };

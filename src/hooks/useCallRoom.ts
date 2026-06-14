@@ -14,6 +14,23 @@ export type CallStatus = "idle" | "connecting" | "connected" | "disconnected" | 
 
 type Role = "agent" | "customer";
 
+export type DeviceOption = { deviceId: string; label: string };
+
+export type CallStats = {
+  pcState: RTCPeerConnectionState | "idle";
+  iceState: RTCIceConnectionState | "idle";
+  iceGathering: RTCIceGathererState | "idle";
+  signaling: RTCSignalingState | "idle";
+  localCandidateType?: string;
+  remoteCandidateType?: string;
+  protocol?: string;
+  rtt?: number;
+  audioInKbps?: number;
+  videoInKbps?: number;
+  audioOutKbps?: number;
+  videoOutKbps?: number;
+};
+
 const ICE: RTCConfiguration = {
   iceServers: [
     { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
@@ -32,12 +49,19 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
+  const [stats, setStats] = useState<CallStats>({
+    pcState: "idle",
+    iceState: "idle",
+    iceGathering: "idle",
+    signaling: "idle",
+  });
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const startedRef = useRef(false);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const prevBytesRef = useRef<{ ts: number; ai: number; vi: number; ao: number; vo: number } | null>(null);
 
   const sendSignal = useCallback((type: string, payload: unknown) => {
     channelRef.current?.send({ type: "broadcast", event: type, payload: { from: role, name: displayName, ...(payload as object) } });
@@ -55,8 +79,12 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
     pc.onicecandidate = (e) => {
       if (e.candidate) sendSignal("ice", { candidate: e.candidate.toJSON() });
     };
+    pc.oniceconnectionstatechange = () => setStats((s) => ({ ...s, iceState: pc.iceConnectionState }));
+    pc.onicegatheringstatechange = () => setStats((s) => ({ ...s, iceGathering: pc.iceGatheringState }));
+    pc.onsignalingstatechange = () => setStats((s) => ({ ...s, signaling: pc.signalingState }));
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
+      setStats((st) => ({ ...st, pcState: s }));
       if (s === "connected") setStatus("connected");
       else if (s === "connecting" || s === "new") setStatus("connecting");
       else if (s === "disconnected") setStatus("disconnected");
@@ -73,7 +101,7 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
     sendSignal("offer", { sdp: offer });
   }, [sendSignal]);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (devices?: { videoDeviceId?: string; audioDeviceId?: string }) => {
     if (startedRef.current && pcRef.current) return;
     setError(null);
     setStatus("connecting");
@@ -84,7 +112,10 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
     }
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: devices?.videoDeviceId ? { deviceId: { exact: devices.videoDeviceId } } : true,
+        audio: devices?.audioDeviceId ? { deviceId: { exact: devices.audioDeviceId } } : true,
+      });
     } catch (e) {
       const err = e as DOMException;
       const msg =
@@ -184,6 +215,78 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
     };
   }, []);
 
+  // Poll WebRTC stats while connected for the diagnostics panel.
+  useEffect(() => {
+    if (!started) return;
+    const tick = async () => {
+      const pc = pcRef.current;
+      if (!pc) return;
+      try {
+        const report = await pc.getStats();
+        let localType: string | undefined;
+        let remoteType: string | undefined;
+        let protocol: string | undefined;
+        let rtt: number | undefined;
+        let audioIn = 0, videoIn = 0, audioOut = 0, videoOut = 0;
+        const candidates = new Map<string, RTCStats & Record<string, unknown>>();
+        report.forEach((r: RTCStats & Record<string, unknown>) => {
+          if (r.type === "local-candidate" || r.type === "remote-candidate") candidates.set(r.id, r);
+        });
+        report.forEach((r: RTCStats & Record<string, unknown>) => {
+          if (r.type === "candidate-pair" && (r as { selected?: boolean; nominated?: boolean }).nominated) {
+            const local = candidates.get(r.localCandidateId as string);
+            const remote = candidates.get(r.remoteCandidateId as string);
+            localType = local?.candidateType as string | undefined;
+            remoteType = remote?.candidateType as string | undefined;
+            protocol = local?.protocol as string | undefined;
+            rtt = r.currentRoundTripTime as number | undefined;
+          }
+          if (r.type === "inbound-rtp") {
+            const kind = r.kind as string;
+            const bytes = (r.bytesReceived as number) || 0;
+            if (kind === "audio") audioIn += bytes;
+            if (kind === "video") videoIn += bytes;
+          }
+          if (r.type === "outbound-rtp") {
+            const kind = r.kind as string;
+            const bytes = (r.bytesSent as number) || 0;
+            if (kind === "audio") audioOut += bytes;
+            if (kind === "video") videoOut += bytes;
+          }
+        });
+        const now = Date.now();
+        const prev = prevBytesRef.current;
+        let aIn: number | undefined, vIn: number | undefined, aOut: number | undefined, vOut: number | undefined;
+        if (prev) {
+          const dt = (now - prev.ts) / 1000;
+          if (dt > 0) {
+            aIn = ((audioIn - prev.ai) * 8) / 1000 / dt;
+            vIn = ((videoIn - prev.vi) * 8) / 1000 / dt;
+            aOut = ((audioOut - prev.ao) * 8) / 1000 / dt;
+            vOut = ((videoOut - prev.vo) * 8) / 1000 / dt;
+          }
+        }
+        prevBytesRef.current = { ts: now, ai: audioIn, vi: videoIn, ao: audioOut, vo: videoOut };
+        setStats((s) => ({
+          ...s,
+          localCandidateType: localType,
+          remoteCandidateType: remoteType,
+          protocol,
+          rtt,
+          audioInKbps: aIn,
+          videoInKbps: vIn,
+          audioOutKbps: aOut,
+          videoOutKbps: vOut,
+        }));
+      } catch {
+        // ignore stats errors
+      }
+    };
+    const id = window.setInterval(tick, 2000);
+    tick();
+    return () => window.clearInterval(id);
+  }, [started]);
+
   const toggleMute = useCallback(() => {
     if (!localStream) return;
     const enabled = !muted;
@@ -236,7 +339,7 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
   }, [localStream, role]);
 
   return {
-    localStream, remoteStream, status, peerName, error, started, start,
+    localStream, remoteStream, status, peerName, error, started, start, stats,
     muted, camOff, sharing, messages,
     toggleMute, toggleCam, toggleShare, sendChat, hangup,
   };

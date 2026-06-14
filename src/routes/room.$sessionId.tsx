@@ -214,3 +214,233 @@ function Control({ Icon, label, onClick, accent }: { Icon: React.ComponentType<{
     </Button>
   );
 }
+
+function PreJoin({
+  onJoin,
+  onCancel,
+  connecting,
+  error,
+}: {
+  onJoin: (devs: { videoDeviceId?: string; audioDeviceId?: string }) => void;
+  onCancel: () => void;
+  connecting: boolean;
+  error: string | null;
+}) {
+  const [cams, setCams] = useState<DeviceOption[]>([]);
+  const [mics, setMics] = useState<DeviceOption[]>([]);
+  const [videoDeviceId, setVideoDeviceId] = useState<string>("");
+  const [audioDeviceId, setAudioDeviceId] = useState<string>("");
+  const [previewStream, setPreviewStream] = useState<MediaStream | null>(null);
+  const [permission, setPermission] = useState<"unknown" | "granted" | "denied" | "prompt" | "error">("unknown");
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const previewRef = useRef<HTMLVideoElement>(null);
+
+  const refreshDevices = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    const list = await navigator.mediaDevices.enumerateDevices();
+    const c = list.filter((d) => d.kind === "videoinput").map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Camera ${i + 1}` }));
+    const m = list.filter((d) => d.kind === "audioinput").map((d, i) => ({ deviceId: d.deviceId, label: d.label || `Microphone ${i + 1}` }));
+    setCams(c);
+    setMics(m);
+    setVideoDeviceId((cur) => cur || c[0]?.deviceId || "");
+    setAudioDeviceId((cur) => cur || m[0]?.deviceId || "");
+  }, []);
+
+  const acquirePreview = useCallback(async (v?: string, a?: string) => {
+    setPreviewError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: v ? { deviceId: { exact: v } } : true,
+        audio: a ? { deviceId: { exact: a } } : true,
+      });
+      setPreviewStream((prev) => {
+        prev?.getTracks().forEach((t) => t.stop());
+        return stream;
+      });
+      setPermission("granted");
+      await refreshDevices();
+    } catch (e) {
+      const err = e as DOMException;
+      if (err.name === "NotAllowedError" || err.name === "SecurityError") setPermission("denied");
+      else setPermission("error");
+      setPreviewError(
+        err.name === "NotAllowedError" || err.name === "SecurityError"
+          ? "Camera and microphone permission was blocked. Allow access in your browser's site settings, then click Retry."
+          : err.name === "NotFoundError"
+          ? "No camera or microphone was found on this device."
+          : err.name === "NotReadableError"
+          ? "Your camera or microphone is in use by another application."
+          : `Could not access devices: ${err.message || err.name}`,
+      );
+    }
+  }, [refreshDevices]);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        if (navigator.permissions) {
+          const cam = await navigator.permissions.query({ name: "camera" as PermissionName }).catch(() => null);
+          if (mounted && cam) setPermission(cam.state as "granted" | "denied" | "prompt");
+        }
+      } catch { /* noop */ }
+      await refreshDevices();
+      if (mounted) await acquirePreview();
+    })();
+    const onChange = () => { void refreshDevices(); };
+    navigator.mediaDevices?.addEventListener?.("devicechange", onChange);
+    return () => {
+      mounted = false;
+      navigator.mediaDevices?.removeEventListener?.("devicechange", onChange);
+      setPreviewStream((s) => { s?.getTracks().forEach((t) => t.stop()); return null; });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (previewRef.current) previewRef.current.srcObject = previewStream;
+  }, [previewStream]);
+
+  const onSelectCam = (id: string) => { setVideoDeviceId(id); void acquirePreview(id, audioDeviceId); };
+  const onSelectMic = (id: string) => { setAudioDeviceId(id); void acquirePreview(videoDeviceId, id); };
+
+  const handleJoin = () => {
+    previewStream?.getTracks().forEach((t) => t.stop());
+    setPreviewStream(null);
+    onJoin({ videoDeviceId: videoDeviceId || undefined, audioDeviceId: audioDeviceId || undefined });
+  };
+
+  const blocked = permission === "denied";
+  const combinedError = error || previewError;
+
+  return (
+    <div className="min-h-screen grid place-items-center bg-background p-4">
+      <div className="w-full max-w-2xl rounded-xl border border-border bg-card p-6 shadow-sm">
+        <h1 className="text-lg font-semibold">Check your camera and microphone</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Pick the devices you'd like to use, then join the session.</p>
+
+        <div className="mt-5 grid gap-5 md:grid-cols-[1fr,1fr]">
+          <div className="aspect-video w-full overflow-hidden rounded-lg border border-border bg-black">
+            {previewStream ? (
+              <video ref={previewRef} autoPlay playsInline muted className="h-full w-full object-cover" />
+            ) : (
+              <div className="grid h-full place-items-center text-muted-foreground text-sm">
+                {blocked ? "Camera blocked" : "No preview"}
+              </div>
+            )}
+          </div>
+          <div className="space-y-4">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Camera</label>
+              <Select value={videoDeviceId} onValueChange={onSelectCam} disabled={!cams.length}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder={cams.length ? "Select camera" : "No cameras detected"} /></SelectTrigger>
+                <SelectContent>
+                  {cams.map((c) => <SelectItem key={c.deviceId} value={c.deviceId}>{c.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">Microphone</label>
+              <Select value={audioDeviceId} onValueChange={onSelectMic} disabled={!mics.length}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder={mics.length ? "Select microphone" : "No microphones detected"} /></SelectTrigger>
+                <SelectContent>
+                  {mics.map((m) => <SelectItem key={m.deviceId} value={m.deviceId}>{m.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="text-[11px] text-muted-foreground">
+              Permission: <span className="font-medium">{permission}</span>
+            </div>
+          </div>
+        </div>
+
+        {combinedError && (
+          <div className="mt-4 flex gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+            <div>
+              <p>{combinedError}</p>
+              {blocked && (
+                <p className="mt-1 text-xs opacity-80">
+                  In Chrome, click the camera icon in the address bar → Allow → reload. In Firefox, click the lock icon → Permissions.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          <Button variant="ghost" onClick={onCancel}>Cancel</Button>
+          <Button variant="secondary" onClick={() => acquirePreview(videoDeviceId, audioDeviceId)} disabled={connecting}>
+            Retry permissions
+          </Button>
+          <Button onClick={handleJoin} disabled={connecting || !previewStream}>
+            {connecting ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Joining…</> : <><Camera className="mr-2 h-4 w-4" /> Join session</>}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DiagnosticsButton({
+  stats,
+  status,
+  hasLocal,
+  hasRemote,
+}: {
+  stats: import("@/hooks/useCallRoom").CallStats;
+  status: string;
+  hasLocal: boolean;
+  hasRemote: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button variant="ghost" size="sm" className="ml-2 h-7 px-2" onClick={() => setOpen((o) => !o)} aria-label="Diagnostics">
+        <Activity className="h-3.5 w-3.5 mr-1" /> Diagnostics
+      </Button>
+      {open && (
+        <div className="fixed right-3 top-16 z-50 w-80 rounded-lg border border-border bg-card p-4 shadow-xl text-xs">
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-sm">Connection diagnostics</span>
+            <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground">×</button>
+          </div>
+          <dl className="mt-3 grid grid-cols-[1fr,auto] gap-y-1.5 gap-x-3">
+            <Row label="Status" value={status} />
+            <Row label="Peer connection" value={stats.pcState} />
+            <Row label="ICE state" value={stats.iceState} />
+            <Row label="ICE gathering" value={stats.iceGathering} />
+            <Row label="Signaling" value={stats.signaling} />
+            <Row label="Local candidate" value={stats.localCandidateType ?? "—"} />
+            <Row label="Remote candidate" value={stats.remoteCandidateType ?? "—"} />
+            <Row label="Protocol" value={stats.protocol ?? "—"} />
+            <Row label="RTT" value={stats.rtt != null ? `${Math.round(stats.rtt * 1000)} ms` : "—"} />
+            <Row label="Local track" value={hasLocal ? "active" : "none"} />
+            <Row label="Remote track" value={hasRemote ? "active" : "none"} />
+            <Row label="Audio out / in" value={`${fmt(stats.audioOutKbps)} / ${fmt(stats.audioInKbps)} kbps`} />
+            <Row label="Video out / in" value={`${fmt(stats.videoOutKbps)} / ${fmt(stats.videoInKbps)} kbps`} />
+            <Row label="Architecture" value="Browser P2P (no SFU)" />
+            <Row label="Recording" value="Disabled (P1)" />
+          </dl>
+          <p className="mt-3 text-[10px] text-muted-foreground leading-relaxed">
+            This build uses browser-to-browser WebRTC with public STUN servers and Supabase Realtime for signaling. No SFU or server-side recording is active.
+          </p>
+        </div>
+      )}
+    </>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <>
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="font-mono text-right">{value}</dd>
+    </>
+  );
+}
+
+function fmt(n: number | undefined) {
+  if (n == null || Number.isNaN(n)) return "—";
+  return n < 10 ? n.toFixed(1) : Math.round(n).toString();
+}

@@ -14,6 +14,23 @@ export type CallStatus = "idle" | "connecting" | "connected" | "disconnected" | 
 
 type Role = "agent" | "customer";
 
+export type DeviceOption = { deviceId: string; label: string };
+
+export type CallStats = {
+  pcState: RTCPeerConnectionState | "idle";
+  iceState: RTCIceConnectionState | "idle";
+  iceGathering: RTCIceGathererState | "idle";
+  signaling: RTCSignalingState | "idle";
+  localCandidateType?: string;
+  remoteCandidateType?: string;
+  protocol?: string;
+  rtt?: number;
+  audioInKbps?: number;
+  videoInKbps?: number;
+  audioOutKbps?: number;
+  videoOutKbps?: number;
+};
+
 const ICE: RTCConfiguration = {
   iceServers: [
     { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
@@ -32,12 +49,19 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [started, setStarted] = useState(false);
+  const [stats, setStats] = useState<CallStats>({
+    pcState: "idle",
+    iceState: "idle",
+    iceGathering: "idle",
+    signaling: "idle",
+  });
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
   const cameraTrackRef = useRef<MediaStreamTrack | null>(null);
   const startedRef = useRef(false);
   const cleanupRef = useRef<(() => void) | null>(null);
+  const prevBytesRef = useRef<{ ts: number; ai: number; vi: number; ao: number; vo: number } | null>(null);
 
   const sendSignal = useCallback((type: string, payload: unknown) => {
     channelRef.current?.send({ type: "broadcast", event: type, payload: { from: role, name: displayName, ...(payload as object) } });
@@ -55,8 +79,12 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
     pc.onicecandidate = (e) => {
       if (e.candidate) sendSignal("ice", { candidate: e.candidate.toJSON() });
     };
+    pc.oniceconnectionstatechange = () => setStats((s) => ({ ...s, iceState: pc.iceConnectionState }));
+    pc.onicegatheringstatechange = () => setStats((s) => ({ ...s, iceGathering: pc.iceGatheringState }));
+    pc.onsignalingstatechange = () => setStats((s) => ({ ...s, signaling: pc.signalingState }));
     pc.onconnectionstatechange = () => {
       const s = pc.connectionState;
+      setStats((st) => ({ ...st, pcState: s }));
       if (s === "connected") setStatus("connected");
       else if (s === "connecting" || s === "new") setStatus("connecting");
       else if (s === "disconnected") setStatus("disconnected");
@@ -73,7 +101,7 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
     sendSignal("offer", { sdp: offer });
   }, [sendSignal]);
 
-  const start = useCallback(async () => {
+  const start = useCallback(async (devices?: { videoDeviceId?: string; audioDeviceId?: string }) => {
     if (startedRef.current && pcRef.current) return;
     setError(null);
     setStatus("connecting");
@@ -84,7 +112,10 @@ export function useCallRoom(opts: { sessionId: string; role: Role; displayName: 
     }
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: devices?.videoDeviceId ? { deviceId: { exact: devices.videoDeviceId } } : true,
+        audio: devices?.audioDeviceId ? { deviceId: { exact: devices.audioDeviceId } } : true,
+      });
     } catch (e) {
       const err = e as DOMException;
       const msg =
